@@ -8,11 +8,11 @@ A WordPress plugin (built as a WooCommerce payment gateway) that lets merchants 
 > **Security notice (October 21, 2026): upgrade PHP on your server.**
 > PHP has released fixes for two critical remote code execution vulnerabilities in PHP itself ("PHP2Shell", CVE-2026-109618 and CVE-2026-109619), and they are being actively exploited. **This plugin's code is not affected and no plugin update is needed**, but the flaw can be triggered through any URL on a site running an unpatched PHP version — so your whole WordPress site, including the Allscale API key and secret stored in the plugin settings, is at risk.
 >
-> 1. Upgrade PHP to 8.2.35, 8.3.36, 8.4.27, 8.5.12 or later. On managed hosting, check with your host.
-> 2. If you can't upgrade right away, set `session.upload_progress.enabled = Off` in `php.ini` as a temporary mitigation.
+> 1. Upgrade PHP to 8.2.35, 8.3.36, 8.4.27, 8.5.12 or later — per the PHP project, updating is the only complete fix. On managed hosting, check with your host. PHP 7.4–8.1 no longer get official releases: ask your host or OS vendor for a patched package, or move to a supported PHP version.
+> 2. If you can't upgrade right away, see the "If you cannot update immediately" section of the official advisory for partial mitigations. They reduce exposure but do not make a site safe.
 > 3. If you suspect your site was compromised, rotate your API secret in the Allscale dashboard and update it in the plugin settings.
 >
-> Details: [Qualys](https://blog.qualys.com/vulnerabilities-threat-research/2026/10/20/php-announces-critical-security-release-for-two-vulnerabilities) · [Google Cloud](https://cloud.google.com/blog/products/identity-security/responding-to-core-php-vulnerabilities-cve-2026-109618-cve-2026-109619) · [Patchstack](https://patchstack.com/articles/php-major-vulnerability-alert-10-2026/)
+> Details: [PHP security advisory](https://www.php.net/archive/2026.php#2026-10-21-5) · [GHSA-w8hw-w9fx-j79w](https://github.com/php/php-src/security/advisories/GHSA-w8hw-w9fx-j79w) (CVE-2026-109618) · [GHSA-6wmf-4rv5-p3rp](https://github.com/php/php-src/security/advisories/GHSA-6wmf-4rv5-p3rp) (CVE-2026-109619)
 
 > **Status:** pre-release (v0). Functional but lightly tested. Don't run on production stores yet.
 
