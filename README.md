@@ -6,9 +6,9 @@ A WordPress plugin (built as a WooCommerce payment gateway) that lets merchants 
 
 > [!WARNING]
 > **Security notice (October 21, 2026): upgrade PHP on your server.**
-> PHP has released fixes for two critical remote code execution vulnerabilities in PHP itself ("PHP2Shell", CVE-2026-109618 and CVE-2026-109619), and they are being actively exploited. **This plugin's code is not affected and no plugin update is needed**, but the flaw can be triggered through any URL on a site running an unpatched PHP version — so your whole WordPress site, including the Allscale API key and secret stored in the plugin settings, is at risk.
+> PHP has released fixes for two critical remote code execution vulnerabilities in PHP itself (CVE-2026-109618 and CVE-2026-109619); the PHP project reports a demonstrated exploit in which an unauthenticated request triggers the attack before any application code runs. **This plugin's code is not affected and no plugin update is needed**, but the flaw can be triggered through any URL on a site running an unpatched PHP version — so your whole WordPress site, including the Allscale API key and secret stored in the plugin settings, is at risk.
 >
-> 1. Upgrade PHP to 8.2.35, 8.3.36, 8.4.27, 8.5.12 or later — per the PHP project, updating is the only complete fix. On managed hosting, check with your host. PHP 7.4–8.1 no longer get official releases: ask your host or OS vendor for a patched package, or move to a supported PHP version.
+> 1. Upgrade PHP to 8.2.35, 8.3.36, 8.4.27, 8.5.12 or later — per the PHP project, updating is the only complete fix. On managed hosting, check with your host. PHP 7.4–8.1 no longer get official releases: ask your host or OS vendor for a patched package (the PHP project has published source backports for 7.4–8.1), or move to a supported PHP version.
 > 2. If you can't upgrade right away, see the "If you cannot update immediately" section of the official advisory for partial mitigations. They reduce exposure but do not make a site safe.
 > 3. If you suspect your site was compromised, rotate your API secret in the Allscale dashboard and update it in the plugin settings.
 >
