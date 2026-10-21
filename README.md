@@ -4,6 +4,16 @@ A WordPress plugin (built as a WooCommerce payment gateway) that lets merchants 
 
 **What is Allscale?** Allscale is a self-custody crypto payment processor. It hosts the checkout page where buyers pay, validates payments on-chain, and settles to the merchant's wallet. The merchant's API key + secret are scoped to a single Allscale "store" — Allscale itself never custodies funds.
 
+> [!WARNING]
+> **Security notice (October 21, 2026): upgrade PHP on your server.**
+> PHP has released fixes for two critical remote code execution vulnerabilities in PHP itself ("PHP2Shell", CVE-2026-109618 and CVE-2026-109619), and they are being actively exploited. **This plugin's code is not affected and no plugin update is needed**, but the flaw can be triggered through any URL on a site running an unpatched PHP version — so your whole WordPress site, including the Allscale API key and secret stored in the plugin settings, is at risk.
+>
+> 1. Upgrade PHP to 8.2.35, 8.3.36, 8.4.27, 8.5.12 or later. On managed hosting, check with your host.
+> 2. If you can't upgrade right away, set `session.upload_progress.enabled = Off` in `php.ini` as a temporary mitigation.
+> 3. If you suspect your site was compromised, rotate your API secret in the Allscale dashboard and update it in the plugin settings.
+>
+> Details: [Qualys](https://blog.qualys.com/vulnerabilities-threat-research/2026/10/20/php-announces-critical-security-release-for-two-vulnerabilities) · [Google Cloud](https://cloud.google.com/blog/products/identity-security/responding-to-core-php-vulnerabilities-cve-2026-109618-cve-2026-109619) · [Patchstack](https://patchstack.com/articles/php-major-vulnerability-alert-10-2026/)
+
 > **Status:** pre-release (v0). Functional but lightly tested. Don't run on production stores yet.
 
 ---
