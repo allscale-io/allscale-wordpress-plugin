@@ -4,6 +4,16 @@ A WordPress plugin (built as a WooCommerce payment gateway) that lets merchants 
 
 **What is Allscale?** Allscale is a self-custody crypto payment processor. It hosts the checkout page where buyers pay, validates payments on-chain, and settles to the merchant's wallet. The merchant's API key + secret are scoped to a single Allscale "store" — Allscale itself never custodies funds.
 
+> [!WARNING]
+> **Security notice (October 21, 2026): upgrade PHP on your server.**
+> PHP has released fixes for two critical remote code execution vulnerabilities in PHP itself (CVE-2026-109618 and CVE-2026-109619); the PHP project reports a demonstrated exploit in which an unauthenticated request triggers the attack before any application code runs. **This plugin's code is not affected and no plugin update is needed**, but the flaw can be triggered through any URL on a site running an unpatched PHP version — so your whole WordPress site, including the Allscale API key and secret stored in the plugin settings, is at risk.
+>
+> 1. Upgrade PHP to 8.2.35, 8.3.36, 8.4.27, 8.5.12 or later — per the PHP project, updating is the only complete fix. On managed hosting, check with your host. PHP 7.4–8.1 no longer get official releases: ask your host or OS vendor for a patched package (the PHP project has published source backports for 7.4–8.1), or move to a supported PHP version.
+> 2. If you can't upgrade right away, see the "If you cannot update immediately" section of the official advisory for partial mitigations. They reduce exposure but do not make a site safe.
+> 3. If you suspect your site was compromised, rotate your API secret in the Allscale dashboard and update it in the plugin settings.
+>
+> Details: [PHP security advisory](https://www.php.net/archive/2026.php#2026-10-21-5) · [GHSA-w8hw-w9fx-j79w](https://github.com/php/php-src/security/advisories/GHSA-w8hw-w9fx-j79w) (CVE-2026-109618) · [GHSA-6wmf-4rv5-p3rp](https://github.com/php/php-src/security/advisories/GHSA-6wmf-4rv5-p3rp) (CVE-2026-109619)
+
 > **Status:** pre-release (v0). Functional but lightly tested. Don't run on production stores yet.
 
 ---
