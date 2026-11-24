@@ -279,8 +279,16 @@ final class Status_Mapper {
 			// got here, and the thank-you block / order meta box render from
 			// that meta. Left as-is, an underpaying customer sees "Payment
 			// confirmed" while the order sits on-hold. Record the outcome we
-			// actually applied.
-			$order->update_meta_data( self::META_STATUS, Status_Codes::UNDERPAID );
+			// actually applied. If another intent's confirmation is still
+			// awaiting its amount, keep the order shown as pending review so the
+			// thank-you page keeps polling; this underpayment is recorded in the
+			// order note below.
+			$order->update_meta_data(
+				self::META_STATUS,
+				array() !== self::unverified_confirmations( $order )
+					? Status_Codes::PENDING_MANUAL_OPERATION
+					: Status_Codes::UNDERPAID
+			);
 			$order->update_status(
 				'on-hold',
 				sprintf(

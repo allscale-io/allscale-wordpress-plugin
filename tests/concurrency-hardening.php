@@ -431,6 +431,11 @@ namespace Allscale\Checkout\Tests {
 		$two_intent_order->get_meta( Status_Mapper::META_UNVERIFIED_CONFIRMATION, false ),
 		'An underpaid confirmation for another intent must not clear an unverified confirmation.'
 	);
+	expect_same(
+		Status_Codes::PENDING_MANUAL_OPERATION,
+		$two_intent_order->get_meta( Status_Mapper::META_STATUS ),
+		'An underpayment on another intent must keep the order shown as pending while one confirmation is unverified.'
+	);
 	Status_Mapper::apply( $two_intent_order, Status_Codes::CANCELED, array( 'intent_id' => 'intent-b' ), $logger );
 	expect_same( 'on-hold', $two_intent_order->get_status(), 'A cancel event must not cancel an order while another intent is unverified.' );
 
