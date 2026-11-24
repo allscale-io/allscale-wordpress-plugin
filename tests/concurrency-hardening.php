@@ -89,6 +89,21 @@ namespace {
 			unset( $this->meta[ $key ] );
 		}
 
+		public function delete_meta_data_value( $key, $value ) {
+			if ( ! isset( $this->meta[ $key ] ) ) {
+				return;
+			}
+			$values = is_array( $this->meta[ $key ] ) ? $this->meta[ $key ] : array( $this->meta[ $key ] );
+			$values = array_values( array_filter( $values, function ( $v ) use ( $value ) {
+				return $v !== $value;
+			} ) );
+			if ( empty( $values ) ) {
+				unset( $this->meta[ $key ] );
+			} else {
+				$this->meta[ $key ] = $values;
+			}
+		}
+
 		public function update_status( $status, $note = '' ) {
 			$this->status = $status;
 			if ( $note !== '' ) {
@@ -379,6 +394,11 @@ namespace Allscale\Checkout\Tests {
 		$logger
 	);
 	expect_same( 'on-hold', $no_amount_order->get_status(), 'A late TIMEOUT must not cancel an order holding an unverified confirmation.' );
+	expect_same(
+		Status_Codes::PENDING_MANUAL_OPERATION,
+		$no_amount_order->get_meta( Status_Mapper::META_STATUS ),
+		'An ignored failure event must not overwrite the held status shown to the customer.'
+	);
 
 	Status_Mapper::apply(
 		$no_amount_order,
@@ -392,6 +412,28 @@ namespace Allscale\Checkout\Tests {
 	);
 	expect_same( true, $no_amount_order->is_paid(), 'A later CONFIRMED with the full amount must complete a held order.' );
 	expect_same( '', $no_amount_order->get_meta( Status_Mapper::META_UNVERIFIED_CONFIRMATION ), 'Resolving the confirmation must clear the unverified marker.' );
+
+	// Intent A confirms without an amount; superseded intent B then confirms
+	// underpaid. B must not clear A's protection.
+	$two_intent_order = new \WC_Order( 606, array(), false, 'pending', 25 );
+	Status_Mapper::apply( $two_intent_order, Status_Codes::CONFIRMED, array( 'intent_id' => 'intent-a' ), $logger );
+	Status_Mapper::apply(
+		$two_intent_order,
+		Status_Codes::CONFIRMED,
+		array(
+			'intent_id'  => 'intent-b',
+			'paid_cents' => 1000,
+		),
+		$logger
+	);
+	expect_same(
+		array( 'intent-a' ),
+		$two_intent_order->get_meta( Status_Mapper::META_UNVERIFIED_CONFIRMATION, false ),
+		'An underpaid confirmation for another intent must not clear an unverified confirmation.'
+	);
+	Status_Mapper::apply( $two_intent_order, Status_Codes::CANCELED, array( 'intent_id' => 'intent-b' ), $logger );
+	expect_same( 'on-hold', $two_intent_order->get_status(), 'A cancel event must not cancel an order while another intent is unverified.' );
+
 
 	$full_amount_order = new \WC_Order( 505, array(), false, 'pending', 25 );
 	Status_Mapper::apply(

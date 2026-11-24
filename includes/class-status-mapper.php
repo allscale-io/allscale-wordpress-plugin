@@ -26,9 +26,10 @@ final class Status_Mapper {
 	const META_DUPLICATE_PAYMENT    = '_allscale_duplicate_payment_intent_id';
 	const META_LATE_PAYMENT         = '_allscale_late_payment_intent_id';
 	const META_PROCESSED_WEBHOOK_ID = '_allscale_processed_webhook_id';
-	// Set while a CONFIRMED status is held for lack of a paid amount. A later
-	// failure/cancel event must not cancel such an order (funds may have
-	// arrived); a later CONFIRMED that carries the amount resolves it.
+	// Non-unique meta, one row per intent whose CONFIRMED status arrived
+	// without a paid amount. While any row exists, failure/cancel events must
+	// not cancel the order (funds may have arrived); a later CONFIRMED that
+	// carries the amount clears only that intent's row.
 	const META_UNVERIFIED_CONFIRMATION = '_allscale_unverified_confirmation';
 	// Non-unique meta: one row per superseded intent. When the customer
 	// re-enters process_payment (double-click, pay-for-order retry) a fresh
@@ -92,6 +93,13 @@ final class Status_Mapper {
 					'incoming'       => $status,
 				)
 			);
+			return;
+		}
+
+		// Reject stale failure events before persisting anything: otherwise
+		// _allscale_status would read as a failure on an order we deliberately
+		// keep paid or held, and the thank-you page would stop polling.
+		if ( Status_Codes::is_failure( $status ) && self::guard_paid_order( $order, $status, $logger ) ) {
 			return;
 		}
 
@@ -162,9 +170,6 @@ final class Status_Mapper {
 				return;
 
 			case Status_Codes::FAILED:
-				if ( self::guard_paid_order( $order, $status, $logger ) ) {
-					return;
-				}
 				if ( $current_status !== 'failed' ) {
 					$order->update_status(
 						'failed',
@@ -174,9 +179,6 @@ final class Status_Mapper {
 				return;
 
 			case Status_Codes::REJECTED:
-				if ( self::guard_paid_order( $order, $status, $logger ) ) {
-					return;
-				}
 				if ( $current_status !== 'failed' ) {
 					$order->update_status(
 						'failed',
@@ -186,9 +188,6 @@ final class Status_Mapper {
 				return;
 
 			case Status_Codes::UNDERPAID:
-				if ( self::guard_paid_order( $order, $status, $logger ) ) {
-					return;
-				}
 				if ( $current_status !== 'on-hold' ) {
 					$paid_cents = isset( $context['paid_cents'] ) ? (int) $context['paid_cents'] : 0;
 					$order->update_status(
@@ -203,9 +202,6 @@ final class Status_Mapper {
 				return;
 
 			case Status_Codes::CANCELED:
-				if ( self::guard_paid_order( $order, $status, $logger ) ) {
-					return;
-				}
 				if ( $current_status !== 'cancelled' ) {
 					$order->update_status(
 						'cancelled',
@@ -215,9 +211,6 @@ final class Status_Mapper {
 				return;
 
 			case Status_Codes::TIMEOUT:
-				if ( self::guard_paid_order( $order, $status, $logger ) ) {
-					return;
-				}
 				if ( $current_status !== 'cancelled' ) {
 					$order->update_status(
 						'cancelled',
@@ -255,8 +248,10 @@ final class Status_Mapper {
 		// still missing, hold the order for the merchant instead of trusting the
 		// status alone.
 		if ( $paid_cents <= 0 ) {
-			$intent_id = isset( $context['intent_id'] ) ? (string) $context['intent_id'] : '';
-			$order->update_meta_data( self::META_UNVERIFIED_CONFIRMATION, $intent_id !== '' ? $intent_id : '1' );
+			$marker = self::unverified_marker( $context );
+			if ( ! in_array( $marker, self::unverified_confirmations( $order ), true ) ) {
+				$order->add_meta_data( self::META_UNVERIFIED_CONFIRMATION, $marker, false );
+			}
 			$order->update_meta_data( self::META_STATUS, Status_Codes::PENDING_MANUAL_OPERATION );
 			$order->update_status(
 				'on-hold',
@@ -272,9 +267,12 @@ final class Status_Mapper {
 			return;
 		}
 
-		// The amount is now known, so any earlier unverified confirmation is
-		// resolved by the outcome below.
-		$order->delete_meta_data( self::META_UNVERIFIED_CONFIRMATION );
+		// This intent's amount is now known, so its own unverified confirmation
+		// (if any) is resolved by the outcome below. Other intents keep theirs.
+		$marker = self::unverified_marker( $context );
+		if ( in_array( $marker, self::unverified_confirmations( $order ), true ) ) {
+			$order->delete_meta_data_value( self::META_UNVERIFIED_CONFIRMATION, $marker );
+		}
 
 		if ( $paid_cents < $expected_cents ) {
 			// persist_meta() already stamped META_STATUS = CONFIRMED before we
@@ -442,7 +440,7 @@ final class Status_Mapper {
 	 * @return bool True if the order was paid and the caller should bail.
 	 */
 	private static function guard_paid_order( \WC_Order $order, $status, Logger $logger ) {
-		if ( ! $order->is_paid() && '' !== (string) $order->get_meta( self::META_UNVERIFIED_CONFIRMATION ) ) {
+		if ( ! $order->is_paid() && array() !== self::unverified_confirmations( $order ) ) {
 			$logger->warning(
 				'Ignoring failure-state status for an order with an unverified confirmation',
 				array(
@@ -465,6 +463,34 @@ final class Status_Mapper {
 			)
 		);
 		return true;
+	}
+
+	/**
+	 * Marker value identifying the intent in an unverified-confirmation row.
+	 *
+	 * @param array $context Payment context.
+	 * @return string Intent id, or "1" when the event carried none.
+	 */
+	private static function unverified_marker( array $context ) {
+		$intent_id = isset( $context['intent_id'] ) ? (string) $context['intent_id'] : '';
+		return $intent_id !== '' ? $intent_id : '1';
+	}
+
+	/**
+	 * Intents whose CONFIRMED status is still awaiting a verified amount.
+	 *
+	 * @param \WC_Order $order Order.
+	 * @return string[]
+	 */
+	private static function unverified_confirmations( \WC_Order $order ) {
+		$values = array();
+		foreach ( (array) $order->get_meta( self::META_UNVERIFIED_CONFIRMATION, false ) as $meta ) {
+			$value = is_object( $meta ) && isset( $meta->value ) ? (string) $meta->value : (string) $meta;
+			if ( $value !== '' ) {
+				$values[] = $value;
+			}
+		}
+		return $values;
 	}
 
 	/**

@@ -327,7 +327,7 @@ If you query or display Allscale data elsewhere, the canonical meta keys are:
 | `_allscale_prior_intent_id` | Superseded intent IDs, one meta row per ID |
 | `_allscale_checkout_url` | Checkout URL for safe intent reuse |
 | `_allscale_intent_amount_cents` | Order amount bound to the current intent |
-| `_allscale_unverified_confirmation` | Set while a CONFIRMED status without a paid amount holds the order on-hold; blocks later failure/cancel events until a CONFIRMED with an amount resolves it |
+| `_allscale_unverified_confirmation` | One row per intent whose CONFIRMED status arrived without a paid amount (order held on-hold). While any row exists, failure/cancel events are ignored; a later CONFIRMED with an amount clears that intent's row |
 | `_allscale_settled_intent_id` | Intent that first completed the order |
 | `_allscale_duplicate_payment_intent_id` | Additional confirmed intents requiring reconciliation |
 | `_allscale_late_payment_intent_id` | Intents paid after WooCommerce cancelled the order |
