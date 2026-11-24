@@ -85,6 +85,10 @@ namespace {
 			return $this->total;
 		}
 
+		public function delete_meta_data( $key ) {
+			unset( $this->meta[ $key ] );
+		}
+
 		public function update_status( $status, $note = '' ) {
 			$this->status = $status;
 			if ( $note !== '' ) {
@@ -367,6 +371,27 @@ namespace Allscale\Checkout\Tests {
 		$no_amount_order->get_meta( Status_Mapper::META_STATUS ),
 		'An unverified confirmation must not be displayed as a confirmed payment.'
 	);
+
+	Status_Mapper::apply(
+		$no_amount_order,
+		Status_Codes::TIMEOUT,
+		array( 'intent_id' => 'intent-no-amount' ),
+		$logger
+	);
+	expect_same( 'on-hold', $no_amount_order->get_status(), 'A late TIMEOUT must not cancel an order holding an unverified confirmation.' );
+
+	Status_Mapper::apply(
+		$no_amount_order,
+		Status_Codes::CONFIRMED,
+		array(
+			'intent_id'  => 'intent-no-amount',
+			'tx_hash'    => 'tx-no-amount',
+			'paid_cents' => 2500,
+		),
+		$logger
+	);
+	expect_same( true, $no_amount_order->is_paid(), 'A later CONFIRMED with the full amount must complete a held order.' );
+	expect_same( '', $no_amount_order->get_meta( Status_Mapper::META_UNVERIFIED_CONFIRMATION ), 'Resolving the confirmation must clear the unverified marker.' );
 
 	$full_amount_order = new \WC_Order( 505, array(), false, 'pending', 25 );
 	Status_Mapper::apply(

@@ -26,6 +26,10 @@ final class Status_Mapper {
 	const META_DUPLICATE_PAYMENT    = '_allscale_duplicate_payment_intent_id';
 	const META_LATE_PAYMENT         = '_allscale_late_payment_intent_id';
 	const META_PROCESSED_WEBHOOK_ID = '_allscale_processed_webhook_id';
+	// Set while a CONFIRMED status is held for lack of a paid amount. A later
+	// failure/cancel event must not cancel such an order (funds may have
+	// arrived); a later CONFIRMED that carries the amount resolves it.
+	const META_UNVERIFIED_CONFIRMATION = '_allscale_unverified_confirmation';
 	// Non-unique meta: one row per superseded intent. When the customer
 	// re-enters process_payment (double-click, pay-for-order retry) a fresh
 	// intent replaces META_INTENT_ID, but the old one is still live on the
@@ -251,6 +255,8 @@ final class Status_Mapper {
 		// still missing, hold the order for the merchant instead of trusting the
 		// status alone.
 		if ( $paid_cents <= 0 ) {
+			$intent_id = isset( $context['intent_id'] ) ? (string) $context['intent_id'] : '';
+			$order->update_meta_data( self::META_UNVERIFIED_CONFIRMATION, $intent_id !== '' ? $intent_id : '1' );
 			$order->update_meta_data( self::META_STATUS, Status_Codes::PENDING_MANUAL_OPERATION );
 			$order->update_status(
 				'on-hold',
@@ -265,6 +271,10 @@ final class Status_Mapper {
 			);
 			return;
 		}
+
+		// The amount is now known, so any earlier unverified confirmation is
+		// resolved by the outcome below.
+		$order->delete_meta_data( self::META_UNVERIFIED_CONFIRMATION );
 
 		if ( $paid_cents < $expected_cents ) {
 			// persist_meta() already stamped META_STATUS = CONFIRMED before we
@@ -432,6 +442,17 @@ final class Status_Mapper {
 	 * @return bool True if the order was paid and the caller should bail.
 	 */
 	private static function guard_paid_order( \WC_Order $order, $status, Logger $logger ) {
+		if ( ! $order->is_paid() && '' !== (string) $order->get_meta( self::META_UNVERIFIED_CONFIRMATION ) ) {
+			$logger->warning(
+				'Ignoring failure-state status for an order with an unverified confirmation',
+				array(
+					'order_id'        => $order->get_id(),
+					'incoming_status' => (int) $status,
+					'wc_status'       => $order->get_status(),
+				)
+			);
+			return true;
+		}
 		if ( ! $order->is_paid() ) {
 			return false;
 		}
