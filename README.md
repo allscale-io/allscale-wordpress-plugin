@@ -4,6 +4,16 @@ A WordPress plugin (built as a WooCommerce payment gateway) that lets merchants 
 
 **What is Allscale?** Allscale is a self-custody crypto payment processor. It hosts the checkout page where buyers pay, validates payments on-chain, and settles to the merchant's wallet. The merchant's API key + secret are scoped to a single Allscale "store" — Allscale itself never custodies funds.
 
+> [!WARNING]
+> **Security notice (October 21, 2026): upgrade PHP on your server.**
+> PHP has released fixes for two critical remote code execution vulnerabilities in PHP itself (CVE-2026-109618 and CVE-2026-109619); the PHP project reports a demonstrated exploit in which an unauthenticated request triggers the attack before any application code runs. **This plugin's code is not affected and no plugin update is needed**, but the flaw can be triggered through any URL on a site running an unpatched PHP version — so your whole WordPress site, including the Allscale API key and secret stored in the plugin settings, is at risk.
+>
+> 1. Upgrade PHP to 8.2.35, 8.3.36, 8.4.27, 8.5.12 or later — per the PHP project, updating is the only complete fix. On managed hosting, check with your host. PHP 7.4–8.1 no longer get official releases: ask your host or OS vendor for a patched package (the PHP project has published source backports for 7.4–8.1), or move to a supported PHP version.
+> 2. If you can't upgrade right away, see the "If you cannot update immediately" section of the official advisory for partial mitigations. They reduce exposure but do not make a site safe.
+> 3. If you suspect your site was compromised, rotate your API secret in the Allscale dashboard and update it in the plugin settings.
+>
+> Details: [PHP security advisory](https://www.php.net/archive/2026.php#2026-10-21-5) · [GHSA-w8hw-w9fx-j79w](https://github.com/php/php-src/security/advisories/GHSA-w8hw-w9fx-j79w) (CVE-2026-109618) · [GHSA-6wmf-4rv5-p3rp](https://github.com/php/php-src/security/advisories/GHSA-6wmf-4rv5-p3rp) (CVE-2026-109619)
+
 > **Status:** pre-release (v0). Functional but lightly tested. Don't run on production stores yet.
 
 ---
@@ -29,7 +39,7 @@ A WordPress plugin (built as a WooCommerce payment gateway) that lets merchants 
 
 The plugin confirms every payment via two independent paths so an order never gets stuck:
 
-- **Webhook (server-to-server)** — Allscale's primary delivery channel. Verified with HMAC-SHA256 and nonce de-duplication. Works even if the customer closes their browser after paying.
+- **Webhook (server-to-server)** — Allscale's primary delivery channel. Verified with HMAC-SHA256, atomic nonce claims, and durable webhook-ID de-duplication. Works even if the customer closes their browser after paying.
 - **Return-URL fallback** — When the customer lands on the thank-you page, the plugin asks the Allscale API for the current intent details and reconciles the order. Ensures the buyer sees "Payment confirmed" immediately even if the webhook is briefly delayed.
 
 Both paths share a single status-mapping decision table and run inside an order lock, so they never duplicate notes or double-complete an order.
@@ -304,6 +314,8 @@ Two filter / action hooks are exposed for third-party code:
 
 - **`allscale_checkout_intent_request_payload`** (filter) — Modify the JSON body sent to `POST /v1/checkout_intents/` before signing. Receives the assembled payload array and the `WC_Order`. Use this to add custom metadata, override `extra`, or inject store-specific fields.
 - **`allscale_checkout_webhook_after_process`** (action) — Fires after the plugin has applied a verified Allscale webhook to the order. Receives the `WC_Order` and the decoded webhook payload array. Use this to trigger custom side effects (notify Slack, sync to an external system, etc.).
+- **`allscale_checkout_duplicate_payment_detected`** (action) — Fires when a different Allscale intent confirms after the order is already paid. Receives the `WC_Order` and normalized payment context so reconciliation tooling can alert the merchant.
+- **`allscale_checkout_late_payment_detected`** (action) — Fires when payment confirms after WooCommerce has cancelled the order. The plugin records the payment but deliberately does not restore or fulfil the order automatically.
 
 ### Order meta keys
 
@@ -312,6 +324,13 @@ If you query or display Allscale data elsewhere, the canonical meta keys are:
 | Key | Meaning |
 |---|---|
 | `_allscale_intent_id` | Allscale checkout intent ID |
+| `_allscale_prior_intent_id` | Superseded intent IDs, one meta row per ID |
+| `_allscale_checkout_url` | Checkout URL for safe intent reuse |
+| `_allscale_intent_amount_cents` | Order amount bound to the current intent |
+| `_allscale_settled_intent_id` | Intent that first completed the order |
+| `_allscale_duplicate_payment_intent_id` | Additional confirmed intents requiring reconciliation |
+| `_allscale_late_payment_intent_id` | Intents paid after WooCommerce cancelled the order |
+| `_allscale_processed_webhook_id` | Durable webhook idempotency records |
 | `_allscale_status` | Latest Allscale status integer (see `Status_Codes`) |
 | `_allscale_tx_hash` | On-chain transaction hash |
 | `_allscale_chain_id` | EIP-155 chain ID |
