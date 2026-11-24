@@ -117,9 +117,9 @@ If your store currency isn't in this list, the plugin shows a warning in setting
 
 ## Requirements
 
-- WordPress 5.8+
-- WooCommerce 6.0+
-- PHP 7.4+
+- WordPress 6.8+
+- WooCommerce 10.5+
+- PHP 8.2+
 - An [Allscale account](https://allscale.io) with Commerce enabled and a store configured with your USDT receiving wallet
 
 > **First time?** Sign up at [allscale.io](https://allscale.io). Allscale is non-custodial, charges 0.6% per transaction (minimum $0.10), and settles instantly as USDT to your own wallet.

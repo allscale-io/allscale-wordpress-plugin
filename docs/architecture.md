@@ -368,7 +368,7 @@ allscale-wordpress-plugin/
 
 | Item | Convention |
 |---|---|
-| **PHP namespace** | `Allscale\Checkout\` (PHP 7.4+ supports namespaces natively; the plugin's `Requires PHP` is 7.4) |
+| **PHP namespace** | `Allscale\Checkout\` (the plugin's `Requires PHP` is 8.2 — see the 0.0.6 changelog for why) |
 | **Constants** | `ALLSCALE_CHECKOUT_*` (e.g., `ALLSCALE_CHECKOUT_VERSION`, `ALLSCALE_CHECKOUT_PATH`, `ALLSCALE_CHECKOUT_BASE_URL`) |
 | **Plugin option key** | `woocommerce_allscale_checkout_settings` (WC convention; preserved from 0.1.x for in-place upgrade) |
 | **Order meta keys** | `_allscale_intent_id`, `_allscale_tx_hash`, `_allscale_status`, `_allscale_payment_method_type`, `_allscale_chain_id`, `_allscale_actual_paid_amount`, `_allscale_service_fee_amount`, `_allscale_net_income_amount` |
