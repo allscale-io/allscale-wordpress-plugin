@@ -6,6 +6,12 @@
  */
 
 namespace {
+	// CLI-only test script. Refuse to run when reached over HTTP (e.g. a dev
+	// checkout symlinked into wp-content/plugins).
+	if ( PHP_SAPI !== 'cli' ) {
+		exit;
+	}
+
 	define( 'ABSPATH', __DIR__ . '/' );
 
 	class WC_Payment_Gateway {
@@ -77,6 +83,18 @@ namespace {
 
 		public function get_total() {
 			return $this->total;
+		}
+
+		public function update_status( $status, $note = '' ) {
+			$this->status = $status;
+			if ( $note !== '' ) {
+				$this->notes[] = $note;
+			}
+		}
+
+		public function payment_complete( $transaction_id = '' ) {
+			$this->paid   = true;
+			$this->status = 'processing';
 		}
 
 		public function save() {
@@ -331,6 +349,37 @@ namespace Allscale\Checkout\Tests {
 	expect_same( 1, count( $cancelled_order->get_notes() ), 'A late payment must add one merchant-facing order note.' );
 	Status_Mapper::apply( $cancelled_order, Status_Codes::CONFIRMED, $late_context, $logger );
 	expect_same( 1, count( $cancelled_order->get_notes() ), 'The same late payment must not add another order note.' );
+
+	$no_amount_order = new \WC_Order( 404, array(), false, 'pending', 25 );
+	Status_Mapper::apply(
+		$no_amount_order,
+		Status_Codes::CONFIRMED,
+		array(
+			'intent_id' => 'intent-no-amount',
+			'tx_hash'   => 'tx-no-amount',
+		),
+		$logger
+	);
+	expect_same( false, $no_amount_order->is_paid(), 'A CONFIRMED status without a paid amount must not complete the order.' );
+	expect_same( 'on-hold', $no_amount_order->get_status(), 'A CONFIRMED status without a paid amount must hold the order for review.' );
+	expect_same(
+		Status_Codes::PENDING_MANUAL_OPERATION,
+		$no_amount_order->get_meta( Status_Mapper::META_STATUS ),
+		'An unverified confirmation must not be displayed as a confirmed payment.'
+	);
+
+	$full_amount_order = new \WC_Order( 505, array(), false, 'pending', 25 );
+	Status_Mapper::apply(
+		$full_amount_order,
+		Status_Codes::CONFIRMED,
+		array(
+			'intent_id'  => 'intent-full',
+			'tx_hash'    => 'tx-full',
+			'paid_cents' => 2500,
+		),
+		$logger
+	);
+	expect_same( true, $full_amount_order->is_paid(), 'A CONFIRMED status with the full amount must complete the order.' );
 
 	echo "Concurrency hardening tests passed.\n";
 }

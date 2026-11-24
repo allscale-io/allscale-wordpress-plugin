@@ -6,6 +6,12 @@
  */
 
 namespace {
+	// CLI-only test script. Refuse to run when reached over HTTP (e.g. a dev
+	// checkout symlinked into wp-content/plugins).
+	if ( PHP_SAPI !== 'cli' ) {
+		exit;
+	}
+
 	define( 'ABSPATH', __DIR__ . '/' );
 
 	class WC_Payment_Gateway {

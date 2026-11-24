@@ -123,7 +123,9 @@ final class Admin {
 		}
 
 		$api_key    = isset( $_POST['api_key'] ) ? sanitize_text_field( wp_unslash( $_POST['api_key'] ) ) : '';
-		$api_secret = isset( $_POST['api_secret'] ) ? sanitize_text_field( wp_unslash( $_POST['api_secret'] ) ) : '';
+		// Not sanitize_text_field(): it strips %XX octets and would corrupt a secret
+		// that contains them. The value is only used as an HMAC key, never output.
+		$api_secret = isset( $_POST['api_secret'] ) ? trim( (string) wp_unslash( $_POST['api_secret'] ) ) : ''; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
 
 		// Empty field → fall back to stored values (the merchant can test the
 		// already-saved credentials without re-pasting the secret).

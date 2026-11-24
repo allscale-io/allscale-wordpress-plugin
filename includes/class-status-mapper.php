@@ -246,10 +246,27 @@ final class Status_Mapper {
 		$expected_cents = (int) round( (float) $order->get_total() * 100 );
 		$paid_cents     = isset( $context['paid_cents'] ) ? (int) $context['paid_cents'] : 0;
 
-		// If the API only returned the stable-coin amount, accept on the
-		// confirmed-status signal alone — Allscale already validated the amount
-		// against what we sent.
-		if ( $paid_cents > 0 && $paid_cents < $expected_cents ) {
+		// Never complete a payment whose amount cannot be checked. The webhook
+		// handler already tried the intent details endpoint; if the amount is
+		// still missing, hold the order for the merchant instead of trusting the
+		// status alone.
+		if ( $paid_cents <= 0 ) {
+			$order->update_meta_data( self::META_STATUS, Status_Codes::PENDING_MANUAL_OPERATION );
+			$order->update_status(
+				'on-hold',
+				__( 'Allscale: payment reported as confirmed, but no paid amount was provided. Verify the payment in your Allscale dashboard before fulfilling.', 'allscale-checkout' )
+			);
+			$logger->warning(
+				'CONFIRMED status without a paid amount; order placed on hold',
+				array(
+					'order_id'  => $order->get_id(),
+					'intent_id' => isset( $context['intent_id'] ) ? (string) $context['intent_id'] : '',
+				)
+			);
+			return;
+		}
+
+		if ( $paid_cents < $expected_cents ) {
 			// persist_meta() already stamped META_STATUS = CONFIRMED before we
 			// got here, and the thank-you block / order meta box render from
 			// that meta. Left as-is, an underpaying customer sees "Payment

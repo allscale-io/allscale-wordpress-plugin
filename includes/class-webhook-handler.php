@@ -171,6 +171,17 @@ final class Webhook_Handler {
 			'source'              => 'webhook',
 		);
 
+		// A CONFIRMED callback must carry the paid amount so the mapper can check
+		// it against the order total. If the webhook omitted it, read it from the
+		// intent details endpoint rather than completing an unverified payment.
+		if ( $status === Status_Codes::CONFIRMED && $context['paid_cents'] <= 0 ) {
+			$fetched_cents = $this->fetch_intent_amount_cents( $intent_id );
+			if ( $fetched_cents === null ) {
+				return false;
+			}
+			$context['paid_cents'] = $fetched_cents;
+		}
+
 		try {
 			$result = Order_Locker::with_lock(
 				$order->get_id(),
@@ -235,6 +246,35 @@ final class Webhook_Handler {
 		}
 
 		return $result === 'processed' || $result === 'already_processed';
+	}
+
+	/**
+	 * Read an intent's amount_cents from the Allscale details endpoint.
+	 *
+	 * @param string $intent_id Allscale intent id.
+	 * @return int|null Amount in cents (0 when the intent reports none), or
+	 *                  null when the lookup failed and the webhook should be retried.
+	 */
+	private function fetch_intent_amount_cents( $intent_id ) {
+		$settings = Plugin::settings();
+		$api      = new Api_Client(
+			isset( $settings['api_key'] ) ? (string) $settings['api_key'] : '',
+			isset( $settings['api_secret'] ) ? (string) $settings['api_secret'] : '',
+			$this->logger
+		);
+		$details = $api->get_intent_details( $intent_id );
+		if ( ! $details->success || ! is_array( $details->data ) ) {
+			$this->logger->warning(
+				'Could not read amount for CONFIRMED webhook; requesting retry',
+				array(
+					'intent_id' => $intent_id,
+					'code'      => $details->error_code,
+				)
+			);
+			return null;
+		}
+
+		return isset( $details->data['amount_cents'] ) ? (int) $details->data['amount_cents'] : 0;
 	}
 
 	/**
