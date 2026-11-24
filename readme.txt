@@ -1,10 +1,10 @@
 === Allscale Checkout for WordPress ===
 Contributors: allscale
 Tags: woocommerce, payment gateway, crypto, usdt, stablecoin, non-custodial
-Requires at least: 5.8
-Tested up to: 6.5
+Requires at least: 6.8
+Tested up to: 6.8
 Stable tag: 0.0.6
-Requires PHP: 7.4
+Requires PHP: 8.2
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -33,9 +33,9 @@ Allscale Checkout is a WordPress plugin (built as a WooCommerce payment gateway)
 
 = Requirements =
 
-* WordPress 5.8+
-* WooCommerce 6.0+
-* PHP 7.4+
+* WordPress 6.8+
+* WooCommerce 10.5+
+* PHP 8.2+
 * An [Allscale account](https://allscale.io) with Commerce enabled
 
 == Installation ==
@@ -124,6 +124,11 @@ USD, AUD, CAD, CNY, EUR, GBP, HKD, JPY, SGD. You can also enable **native USDT p
 * **Security hardening**: the saved API secret is no longer returned by the settings page or WooCommerce's `/wc/v2/payment_gateways` and `/wc/v3/payment_gateways` REST endpoints. It was previously exposed to users and read-only REST credentials allowed to inspect gateway settings; because the same secret signs payment webhooks, disclosure could allow forged payment confirmations.
 * Submitting the API secret field empty through either the settings page or WooCommerce REST API now **keeps** the stored secret, so saving an unrelated setting cannot silently break webhook verification. Paste a new secret to replace it.
 * Merchants upgrading from an earlier version should rotate their Allscale API secret after installing this release.
+* **Security hardening: a confirmed payment must carry its intent amount.** Before completing an order, the plugin checks the intent's `amount_cents` (the amount the intent was created for; Allscale applies its own payment tolerance before reporting CONFIRMED) against the order total. Stable-coin-priced intents, whose details endpoint returns `amount_cents` = null, are checked via `amount_coins` × 100, matching Allscale's own webhook. If a CONFIRMED webhook omits the amount, the plugin reads it from the intent details endpoint (and asks Allscale to retry if that lookup fails); if no amount can be obtained at all, the order is placed on hold for merchant review instead of being marked paid on the status alone.
+* The thank-you page's return-URL fallback now queries Allscale at most once every 10 seconds per order, so repeatedly loading the order-received URL no longer triggers a signed API call per page view.
+* Pasted API secrets are no longer passed through `sanitize_text_field()`, which silently removed `%XX` sequences; the secret is stored exactly as entered (trimmed).
+* The developer test scripts under `tests/` now refuse to run outside the CLI.
+* **Raised minimum requirements: PHP 8.2, WordPress 6.8, WooCommerce 10.5.** PHP 7.4, 8.0 and 8.1 are end-of-life and have no official release fixing the critical PHP remote code execution flaws CVE-2026-109618 / CVE-2026-109619 (fixed in 8.2.35, 8.3.36, 8.4.27, 8.5.12). WooCommerce 10.5.3 is the first 10.5 release fixing the REST batch CSRF (CVE-2026-3589) and the Store API order-data exposure; WooCommerce 10.5 itself requires WordPress 6.8. Keep your server on the latest patch release of each.
 
 = 0.0.5 =
 * Packaging hygiene: release ZIPs now exclude dev-only content (`.wordpress-org/` marketplace assets, internal `docs/`, dev-facing `README.md`) via a `.distignore` file. v0.0.4 ZIPs accidentally bundled all of that — merchants now get only the runtime code. No code-behavior changes.

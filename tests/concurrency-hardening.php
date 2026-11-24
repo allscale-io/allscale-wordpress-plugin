@@ -6,6 +6,12 @@
  */
 
 namespace {
+	// CLI-only test script. Refuse to run when reached over HTTP (e.g. a dev
+	// checkout symlinked into wp-content/plugins).
+	if ( PHP_SAPI !== 'cli' ) {
+		exit;
+	}
+
 	define( 'ABSPATH', __DIR__ . '/' );
 
 	class WC_Payment_Gateway {
@@ -77,6 +83,37 @@ namespace {
 
 		public function get_total() {
 			return $this->total;
+		}
+
+		public function delete_meta_data( $key ) {
+			unset( $this->meta[ $key ] );
+		}
+
+		public function delete_meta_data_value( $key, $value ) {
+			if ( ! isset( $this->meta[ $key ] ) ) {
+				return;
+			}
+			$values = is_array( $this->meta[ $key ] ) ? $this->meta[ $key ] : array( $this->meta[ $key ] );
+			$values = array_values( array_filter( $values, function ( $v ) use ( $value ) {
+				return $v !== $value;
+			} ) );
+			if ( empty( $values ) ) {
+				unset( $this->meta[ $key ] );
+			} else {
+				$this->meta[ $key ] = $values;
+			}
+		}
+
+		public function update_status( $status, $note = '' ) {
+			$this->status = $status;
+			if ( $note !== '' ) {
+				$this->notes[] = $note;
+			}
+		}
+
+		public function payment_complete( $transaction_id = '' ) {
+			$this->paid   = true;
+			$this->status = 'processing';
 		}
 
 		public function save() {
@@ -331,6 +368,100 @@ namespace Allscale\Checkout\Tests {
 	expect_same( 1, count( $cancelled_order->get_notes() ), 'A late payment must add one merchant-facing order note.' );
 	Status_Mapper::apply( $cancelled_order, Status_Codes::CONFIRMED, $late_context, $logger );
 	expect_same( 1, count( $cancelled_order->get_notes() ), 'The same late payment must not add another order note.' );
+
+	// Stable-coin-priced intents: details return amount_cents = null and the
+	// cents are recovered from amount_coins (mirrors the backend).
+	expect_same( 2500, Status_Mapper::intent_amount_cents( array( 'amount_cents' => 2500 ) ), 'amount_cents wins when present.' );
+	expect_same( 2500, Status_Mapper::intent_amount_cents( array( 'amount_cents' => null, 'amount_coins' => '25' ) ), 'Whole coins recover cents.' );
+	expect_same( 2550, Status_Mapper::intent_amount_cents( array( 'amount_cents' => null, 'amount_coins' => '25.50' ) ), 'Two-decimal coins recover cents.' );
+	expect_same( 2550, Status_Mapper::intent_amount_cents( array( 'amount_coins' => '25.500000' ) ), 'Trailing zeros are ignored.' );
+	expect_same( 1999, Status_Mapper::intent_amount_cents( array( 'amount_coins' => 19.99 ) ), 'A JSON number is accepted without float drift.' );
+	expect_same( 0, Status_Mapper::intent_amount_cents( array( 'amount_coins' => '25.505' ) ), 'A non-cent-aligned amount is unknown, not truncated.' );
+	expect_same( 0, Status_Mapper::intent_amount_cents( array( 'amount_cents' => null ) ), 'No amount fields means unknown.' );
+
+	$no_amount_order = new \WC_Order( 404, array(), false, 'pending', 25 );
+	Status_Mapper::apply(
+		$no_amount_order,
+		Status_Codes::CONFIRMED,
+		array(
+			'intent_id' => 'intent-no-amount',
+			'tx_hash'   => 'tx-no-amount',
+		),
+		$logger
+	);
+	expect_same( false, $no_amount_order->is_paid(), 'A CONFIRMED status without a paid amount must not complete the order.' );
+	expect_same( 'on-hold', $no_amount_order->get_status(), 'A CONFIRMED status without a paid amount must hold the order for review.' );
+	expect_same(
+		Status_Codes::PENDING_MANUAL_OPERATION,
+		$no_amount_order->get_meta( Status_Mapper::META_STATUS ),
+		'An unverified confirmation must not be displayed as a confirmed payment.'
+	);
+
+	Status_Mapper::apply(
+		$no_amount_order,
+		Status_Codes::TIMEOUT,
+		array( 'intent_id' => 'intent-no-amount' ),
+		$logger
+	);
+	expect_same( 'on-hold', $no_amount_order->get_status(), 'A late TIMEOUT must not cancel an order holding an unverified confirmation.' );
+	expect_same(
+		Status_Codes::PENDING_MANUAL_OPERATION,
+		$no_amount_order->get_meta( Status_Mapper::META_STATUS ),
+		'An ignored failure event must not overwrite the held status shown to the customer.'
+	);
+
+	Status_Mapper::apply(
+		$no_amount_order,
+		Status_Codes::CONFIRMED,
+		array(
+			'intent_id'  => 'intent-no-amount',
+			'tx_hash'    => 'tx-no-amount',
+			'paid_cents' => 2500,
+		),
+		$logger
+	);
+	expect_same( true, $no_amount_order->is_paid(), 'A later CONFIRMED with the full amount must complete a held order.' );
+	expect_same( '', $no_amount_order->get_meta( Status_Mapper::META_UNVERIFIED_CONFIRMATION ), 'Resolving the confirmation must clear the unverified marker.' );
+
+	// Intent A confirms without an amount; superseded intent B then confirms
+	// underpaid. B must not clear A's protection.
+	$two_intent_order = new \WC_Order( 606, array(), false, 'pending', 25 );
+	Status_Mapper::apply( $two_intent_order, Status_Codes::CONFIRMED, array( 'intent_id' => 'intent-a' ), $logger );
+	Status_Mapper::apply(
+		$two_intent_order,
+		Status_Codes::CONFIRMED,
+		array(
+			'intent_id'  => 'intent-b',
+			'paid_cents' => 1000,
+		),
+		$logger
+	);
+	expect_same(
+		array( 'intent-a' ),
+		$two_intent_order->get_meta( Status_Mapper::META_UNVERIFIED_CONFIRMATION, false ),
+		'An underpaid confirmation for another intent must not clear an unverified confirmation.'
+	);
+	expect_same(
+		Status_Codes::PENDING_MANUAL_OPERATION,
+		$two_intent_order->get_meta( Status_Mapper::META_STATUS ),
+		'An underpayment on another intent must keep the order shown as pending while one confirmation is unverified.'
+	);
+	Status_Mapper::apply( $two_intent_order, Status_Codes::CANCELED, array( 'intent_id' => 'intent-b' ), $logger );
+	expect_same( 'on-hold', $two_intent_order->get_status(), 'A cancel event must not cancel an order while another intent is unverified.' );
+
+
+	$full_amount_order = new \WC_Order( 505, array(), false, 'pending', 25 );
+	Status_Mapper::apply(
+		$full_amount_order,
+		Status_Codes::CONFIRMED,
+		array(
+			'intent_id'  => 'intent-full',
+			'tx_hash'    => 'tx-full',
+			'paid_cents' => 2500,
+		),
+		$logger
+	);
+	expect_same( true, $full_amount_order->is_paid(), 'A CONFIRMED status with the full amount must complete the order.' );
 
 	echo "Concurrency hardening tests passed.\n";
 }

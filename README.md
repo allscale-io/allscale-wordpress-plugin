@@ -117,9 +117,9 @@ If your store currency isn't in this list, the plugin shows a warning in setting
 
 ## Requirements
 
-- WordPress 5.8+
-- WooCommerce 6.0+
-- PHP 7.4+
+- WordPress 6.8+
+- WooCommerce 10.5+
+- PHP 8.2+
 - An [Allscale account](https://allscale.io) with Commerce enabled and a store configured with your USDT receiving wallet
 
 > **First time?** Sign up at [allscale.io](https://allscale.io). Allscale is non-custodial, charges 0.6% per transaction (minimum $0.10), and settles instantly as USDT to your own wallet.
@@ -327,6 +327,7 @@ If you query or display Allscale data elsewhere, the canonical meta keys are:
 | `_allscale_prior_intent_id` | Superseded intent IDs, one meta row per ID |
 | `_allscale_checkout_url` | Checkout URL for safe intent reuse |
 | `_allscale_intent_amount_cents` | Order amount bound to the current intent |
+| `_allscale_unverified_confirmation` | One row per intent whose CONFIRMED status arrived without a paid amount (order held on-hold). While any row exists, failure/cancel events are ignored; a later CONFIRMED with an amount clears that intent's row |
 | `_allscale_settled_intent_id` | Intent that first completed the order |
 | `_allscale_duplicate_payment_intent_id` | Additional confirmed intents requiring reconciliation |
 | `_allscale_late_payment_intent_id` | Intents paid after WooCommerce cancelled the order |

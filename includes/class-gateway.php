@@ -15,6 +15,10 @@ class Gateway extends \WC_Payment_Gateway {
 
 	const ID = 'allscale_checkout';
 
+	// Minimum gap between return-URL API lookups for one order. Matches the
+	// thank-you page's own 10-second auto-refresh.
+	const THANKYOU_POLL_INTERVAL_SECONDS = 10;
+
 	public function __construct() {
 		$this->id                 = self::ID;
 		$this->method_title       = __( 'Allscale Checkout', 'allscale-checkout' );
@@ -398,7 +402,10 @@ class Gateway extends \WC_Payment_Gateway {
 
 		$data          = $details->data;
 		$status        = isset( $data['status'] ) ? (int) $data['status'] : 0;
-		$intent_amount = isset( $data['amount_cents'] ) ? (int) $data['amount_cents'] : $stored_amount;
+		$intent_amount = Status_Mapper::intent_amount_cents( $data );
+		if ( $intent_amount <= 0 ) {
+			$intent_amount = $stored_amount;
+		}
 		$details_url   = isset( $data['checkout_url'] ) ? (string) $data['checkout_url'] : '';
 		$checkout_url  = $details_url !== '' ? $details_url : $stored_url;
 
@@ -494,7 +501,12 @@ class Gateway extends \WC_Payment_Gateway {
 
 		// Only run the API fallback if the order isn't already done. Already-paid
 		// orders (webhook landed in time) still get the status block rendered below.
-		if ( ! $order->is_paid() ) {
+		// The thank-you page is reachable by anyone holding the order-key URL and
+		// auto-reloads while pending, so throttle the signed API lookups per order.
+		$throttle_key = 'allscale_thankyou_poll_' . (int) $order->get_id();
+		$throttled    = false !== get_transient( $throttle_key );
+		if ( ! $order->is_paid() && ! $throttled ) {
+			set_transient( $throttle_key, 1, self::THANKYOU_POLL_INTERVAL_SECONDS );
 			$logger = new Logger( 'yes' === $this->get_option( 'debug_logging' ) );
 			$api    = new Api_Client( (string) $this->get_option( 'api_key' ), (string) $this->get_option( 'api_secret' ), $logger );
 
@@ -510,7 +522,7 @@ class Gateway extends \WC_Payment_Gateway {
 						$context = array(
 							'intent_id'          => $intent_id,
 							'tx_hash'             => isset( $data['tx_hash'] ) ? (string) $data['tx_hash'] : '',
-							'paid_cents'          => isset( $data['amount_cents'] ) ? (int) $data['amount_cents'] : 0,
+							'paid_cents'          => Status_Mapper::intent_amount_cents( $data ),
 							'payment_method_type' => isset( $data['payment_method_type'] ) ? (int) $data['payment_method_type'] : null,
 							'chain_id'            => isset( $data['chain_id'] ) ? (int) $data['chain_id'] : null,
 							'coin_symbol'         => isset( $data['coin_symbol'] ) ? (string) $data['coin_symbol'] : '',

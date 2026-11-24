@@ -47,7 +47,7 @@ Decision needed: which WordPress.org account submits this? Probably an `allscale
 
 ### 1.4 Tested up to
 
-`readme.txt` currently says `Tested up to: 6.5`. Before submitting, verify the plugin works against the latest WordPress release at submission time (currently 6.7+). Update if needed.
+`readme.txt` currently says `Tested up to: 6.8`. Before submitting, verify the plugin works against the latest WordPress release at submission time (currently 6.7+). Update if needed.
 
 ---
 
