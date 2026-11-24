@@ -369,6 +369,16 @@ namespace Allscale\Checkout\Tests {
 	Status_Mapper::apply( $cancelled_order, Status_Codes::CONFIRMED, $late_context, $logger );
 	expect_same( 1, count( $cancelled_order->get_notes() ), 'The same late payment must not add another order note.' );
 
+	// Stable-coin-priced intents: details return amount_cents = null and the
+	// cents are recovered from amount_coins (mirrors the backend).
+	expect_same( 2500, Status_Mapper::intent_amount_cents( array( 'amount_cents' => 2500 ) ), 'amount_cents wins when present.' );
+	expect_same( 2500, Status_Mapper::intent_amount_cents( array( 'amount_cents' => null, 'amount_coins' => '25' ) ), 'Whole coins recover cents.' );
+	expect_same( 2550, Status_Mapper::intent_amount_cents( array( 'amount_cents' => null, 'amount_coins' => '25.50' ) ), 'Two-decimal coins recover cents.' );
+	expect_same( 2550, Status_Mapper::intent_amount_cents( array( 'amount_coins' => '25.500000' ) ), 'Trailing zeros are ignored.' );
+	expect_same( 1999, Status_Mapper::intent_amount_cents( array( 'amount_coins' => 19.99 ) ), 'A JSON number is accepted without float drift.' );
+	expect_same( 0, Status_Mapper::intent_amount_cents( array( 'amount_coins' => '25.505' ) ), 'A non-cent-aligned amount is unknown, not truncated.' );
+	expect_same( 0, Status_Mapper::intent_amount_cents( array( 'amount_cents' => null ) ), 'No amount fields means unknown.' );
+
 	$no_amount_order = new \WC_Order( 404, array(), false, 'pending', 25 );
 	Status_Mapper::apply(
 		$no_amount_order,

@@ -163,7 +163,7 @@ final class Webhook_Handler {
 		$context = array(
 			'intent_id'          => $intent_id,
 			'tx_hash'             => isset( $payload['tx_hash'] ) ? (string) $payload['tx_hash'] : '',
-			'paid_cents'          => isset( $payload['amount_cents'] ) ? (int) $payload['amount_cents'] : 0,
+			'paid_cents'          => Status_Mapper::intent_amount_cents( $payload ),
 			'payment_method_type' => isset( $payload['payment_method_type'] ) ? (int) $payload['payment_method_type'] : null,
 			'chain_id'            => isset( $payload['chain_id'] ) ? (int) $payload['chain_id'] : null,
 			'coin_symbol'         => isset( $payload['coin_symbol'] ) ? (string) $payload['coin_symbol'] : '',
@@ -274,7 +274,9 @@ final class Webhook_Handler {
 			return null;
 		}
 
-		return isset( $details->data['amount_cents'] ) ? (int) $details->data['amount_cents'] : 0;
+		// Stable-coin-priced intents return amount_cents = null here; the helper
+		// recovers the cents from amount_coins.
+		return Status_Mapper::intent_amount_cents( $details->data );
 	}
 
 	/**

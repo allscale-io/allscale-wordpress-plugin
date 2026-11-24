@@ -474,6 +474,36 @@ final class Status_Mapper {
 	}
 
 	/**
+	 * The intent amount, in cents, from an Allscale intent object.
+	 *
+	 * Mirrors the backend's resolve_webhook_amount_cents(): fiat-priced intents
+	 * carry amount_cents; stable-coin-priced intents return amount_cents = null
+	 * from the details endpoint, and their amount_coins is exactly
+	 * amount_cents / 100 by construction, so the cents are recovered from it.
+	 * String arithmetic avoids float rounding.
+	 *
+	 * @param array $data Webhook payload or intent details payload.
+	 * @return int Cents, or 0 when no cent-aligned amount is available.
+	 */
+	public static function intent_amount_cents( array $data ) {
+		if ( isset( $data['amount_cents'] ) && is_numeric( $data['amount_cents'] ) ) {
+			return max( 0, (int) $data['amount_cents'] );
+		}
+		if ( ! isset( $data['amount_coins'] ) || ! is_scalar( $data['amount_coins'] ) ) {
+			return 0;
+		}
+		$coins = trim( (string) $data['amount_coins'] );
+		if ( ! preg_match( '/^(\d+)(?:\.(\d*))?$/', $coins, $m ) ) {
+			return 0;
+		}
+		$fraction = rtrim( isset( $m[2] ) ? $m[2] : '', '0' );
+		if ( strlen( $fraction ) > 2 ) {
+			return 0; // Not cent-aligned; treat as unknown rather than truncating.
+		}
+		return (int) $m[1] * 100 + (int) str_pad( $fraction, 2, '0' );
+	}
+
+	/**
 	 * Marker value identifying the intent in an unverified-confirmation row.
 	 *
 	 * @param array $context Payment context.
